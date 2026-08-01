@@ -61,6 +61,24 @@ static httpd_uri_t apig = {
     .handler = rest_handler,
 };
 
+static httpd_uri_t saved_aps_get = {
+    .uri = "/api/saved_aps",
+    .method = HTTP_GET,
+    .handler = saved_aps_handler,
+};
+
+static httpd_uri_t add_ap_get = {
+    .uri = "/api/add_ap",
+    .method = HTTP_GET,
+    .handler = add_ap_handler,
+};
+
+static httpd_uri_t delete_ap_get = {
+    .uri = "/api/delete_ap",
+    .method = HTTP_GET,
+    .handler = delete_ap_handler,
+};
+
 // URI handler for getting "html page" file
 static httpd_uri_t scan_page_download = {
     .uri = "/scan",
@@ -199,6 +217,9 @@ httpd_handle_t start_webserver(void)
         httpd_register_uri_handler(server, &about_handler);
         httpd_register_uri_handler(server, &styles_handler);
         httpd_register_uri_handler(server, &apig);
+        httpd_register_uri_handler(server, &saved_aps_get);
+        httpd_register_uri_handler(server, &add_ap_get);
+        httpd_register_uri_handler(server, &delete_ap_get);
         httpd_register_uri_handler(server, &advanced_page_download);
         httpd_register_uri_handler(server, &clients_page_download);
         httpd_register_uri_handler(server, &ota_page_download);

@@ -105,6 +105,36 @@
             <div class="form-group row col-4 offset-4 mt-4"> <input class="btn btn-primary" type="submit"
                     value="Apply" /> </div>
         </form>
+
+        <h2 class="mt-4">Saved AP Networks (Auto-Shift Profiles)</h2>
+        <div class="card p-3 bg-light">
+            <div id="saved_aps_container">
+                <table class="table table-hover table-striped">
+                    <thead>
+                        <tr>
+                            <th>SSID</th>
+                            <th>Password</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="saved_aps_tbody">
+                        <tr><td colspan="3" class="text-muted text-center">Loading saved networks...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="row g-2 mt-2">
+                <div class="col-md-5">
+                    <input type="text" id="new_ap_ssid" class="form-control" placeholder="SSID of available network" maxlength="32">
+                </div>
+                <div class="col-md-5">
+                    <input type="password" id="new_ap_password" class="form-control" placeholder="Password (leave blank for open)" maxlength="64">
+                </div>
+                <div class="col-md-2 d-grid">
+                    <button type="button" class="btn btn-success" id="btn_add_saved_ap">Add AP</button>
+                </div>
+            </div>
+        </div>
+
         <h2 class="mt-2">Device Management</h2>
 
         <div class="form-group row col-4 offset-4 mt-2">
@@ -142,6 +172,67 @@
 
     </div>
     <script src="jquery-8a1045d9cbf50b52a0805c111ba08e94.js"></script>
+    <script>
+        function loadSavedAPs() {
+            $.ajax({
+                url: "/api/saved_aps",
+                type: "GET",
+                dataType: "json",
+                success: function(data) {
+                    var tbody = $('#saved_aps_tbody');
+                    tbody.empty();
+                    if (data.length === 0) {
+                        tbody.append('<tr><td colspan="3" class="text-muted text-center">No saved APs. Add profiles below.</td></tr>');
+                        return;
+                    }
+                    data.forEach(function(ap) {
+                        var tr = $('<tr></tr>');
+                        tr.append('<td>' + ap.ssid + '</td>');
+                        tr.append('<td><code>' + (ap.password ? '●●●●' : '(None)') + '</code></td>');
+                        tr.append('<td><button type="button" class="btn btn-danger btn-sm btn-delete-ap" data-ssid="' + ap.ssid + '">Delete</button></td>');
+                        tbody.append(tr);
+                    });
+                }
+            });
+        }
+
+        $(document).ready(function() {
+            loadSavedAPs();
+
+            $('#btn_add_saved_ap').click(function() {
+                var ssid = $('#new_ap_ssid').val().trim();
+                var password = $('#new_ap_password').val().trim();
+                if (!ssid) {
+                    alert('Please enter a valid SSID.');
+                    return;
+                }
+                $.ajax({
+                    url: "/api/add_ap",
+                    type: "GET",
+                    data: { ssid: ssid, password: password },
+                    success: function() {
+                        $('#new_ap_ssid').val('');
+                        $('#new_ap_password').val('');
+                        loadSavedAPs();
+                    }
+                });
+            });
+
+            $(document).on('click', '.btn-delete-ap', function() {
+                var ssid = $(this).data('ssid');
+                if (confirm('Are you sure you want to delete profile for ' + ssid + '?')) {
+                    $.ajax({
+                        url: "/api/delete_ap",
+                        type: "GET",
+                        data: { ssid: ssid },
+                        success: function() {
+                            loadSavedAPs();
+                        }
+                    });
+                }
+            });
+        });
+    </script>
     <script>     $('.password').on('mousedown mouseup mouseout touchstart touchend', function mouseState(e) { var field = $(this).parent().find('input'); if (e.type == "mousedown" || e.type == "touchstart") { field.get(0).type = 'text'; } else { field.get(0).type = 'password'; } });</script>
     <script>(function poll() {
             $.ajax({

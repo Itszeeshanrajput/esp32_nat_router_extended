@@ -11,7 +11,15 @@
 #include "esp_system.h"
 #include "esp_log.h"
 #include "esp_console.h"
+#include "esp_idf_version.h"
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+#include "esp_vfs_dev.h"
+#define uart_vfs_dev_port_set_rx_line_endings esp_vfs_dev_uart_port_set_rx_line_endings
+#define uart_vfs_dev_port_set_tx_line_endings esp_vfs_dev_uart_port_set_tx_line_endings
+#define uart_vfs_dev_use_driver esp_vfs_dev_uart_use_driver
+#else
 #include "driver/uart_vfs.h"
+#endif
 #include "driver/uart.h"
 #include "linenoise/linenoise.h"
 #include "argtable3/argtable3.h"
@@ -42,6 +50,8 @@
 #include "lwip/lwip_napt.h"
 
 #include "router_globals.h"
+#include "cyd_display.h"
+#include "multi_ap.h"
 
 // On board LED
 #define BLINK_GPIO 2
@@ -450,8 +460,17 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
     {
         ESP_LOGI(TAG, "disconnected - retry to connect to the STA");
         ap_connect = false;
-        esp_wifi_connect();
-        ESP_LOGI(TAG, "retry to connect to the STA");
+
+        static int sta_retry_count = 0;
+        sta_retry_count++;
+        if (sta_retry_count >= 3) {
+            ESP_LOGI(TAG, "STA connection failed 3 times. Attempting auto-shift to another saved AP...");
+            sta_retry_count = 0;
+            multi_ap_check_and_switch_async();
+        } else {
+            esp_wifi_connect();
+        }
+
         xEventGroupClearBits(wifi_event_group, WIFI_CONNECTED_BIT);
     }
     else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP)
@@ -754,6 +773,7 @@ static void setLogLevel(void)
 void app_main(void)
 {
     initialize_nvs();
+    cyd_display_init(); // Initialize CYD display and touch
     register_nvs();
     if (checkForResetPinAndReset())
     {
