@@ -31,4 +31,7 @@ void multi_ap_check_and_switch(void);
 // Non-blocking asynchronous wrapper to avoid deadlocking the main event loop
 void multi_ap_check_and_switch_async(void);
 
+// Manually switch connection to the saved AP in the specified slot
+esp_err_t multi_ap_switch_to(int slot_index);
+
 #endif // MULTI_AP_H

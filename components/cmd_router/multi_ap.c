@@ -218,3 +218,44 @@ void multi_ap_check_and_switch_async(void)
 {
     xTaskCreate(multi_ap_task, "multi_ap_task", 4096, NULL, 3, NULL);
 }
+
+esp_err_t multi_ap_switch_to(int slot_index)
+{
+    if (slot_index < 0 || slot_index >= MAX_SAVED_APS) return ESP_ERR_INVALID_ARG;
+
+    saved_ap_t ap_list[MAX_SAVED_APS];
+    multi_ap_load(ap_list);
+
+    if (!ap_list[slot_index].valid) {
+        ESP_LOGE(TAG, "No valid AP profile at slot %d", slot_index);
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    ESP_LOGI(TAG, "Manually switching to saved AP at slot %d: %s", slot_index, ap_list[slot_index].ssid);
+
+    nvs_handle_t nvs;
+    if (nvs_open(PARAM_NAMESPACE, NVS_READWRITE, &nvs) == ESP_OK) {
+        nvs_set_str(nvs, "ssid", ap_list[slot_index].ssid);
+        nvs_set_str(nvs, "passwd", ap_list[slot_index].password);
+        nvs_commit(nvs);
+        nvs_close(nvs);
+    }
+
+    extern char *ssid;
+    extern char *passwd;
+    if (ssid) free(ssid);
+    if (passwd) free(passwd);
+    ssid = strdup(ap_list[slot_index].ssid);
+    passwd = strdup(ap_list[slot_index].password);
+
+    wifi_config_t wifi_config = {0};
+    strlcpy((char *)wifi_config.sta.ssid, ssid, sizeof(wifi_config.sta.ssid));
+    strlcpy((char *)wifi_config.sta.password, passwd, sizeof(wifi_config.sta.password));
+
+    esp_wifi_disconnect();
+    esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config);
+    vTaskDelay(pdMS_TO_TICKS(100));
+    esp_wifi_connect();
+
+    return ESP_OK;
+}

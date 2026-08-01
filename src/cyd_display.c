@@ -6,6 +6,7 @@
 #include "driver/gpio.h"
 #include "driver/spi_master.h"
 #include "driver/adc.h"
+#include "driver/ledc.h"
 #include "esp_log.h"
 #include "router_globals.h"
 #include "esp_wifi.h"
@@ -129,8 +130,8 @@ static const uint8_t font8x8[96][8] = {
     {0x00, 0x00, 0x63, 0x63, 0x63, 0x63, 0x3F, 0x00}, // u
     {0x00, 0x00, 0x63, 0x63, 0x63, 0x36, 0x1C, 0x00}, // v
     {0x00, 0x00, 0x63, 0x63, 0x6B, 0x7F, 0x36, 0x00}, // w
-    {0x63, 0x63, 0x36, 0x1C, 0x36, 0x63, 0x63, 0x00}, // x
-    {0x63, 0x63, 0x63, 0x36, 0x1C, 0x18, 0x18, 0x00}, // y
+    {0x63, 0x63, 0x36, 0x1C, 0x36, 0x63, 0x63, 0x00}, // X
+    {0x63, 0x63, 0x63, 0x36, 0x1C, 0x18, 0x18, 0x00}, // Y
     {0x7F, 0x03, 0x06, 0x0C, 0x18, 0x7F, 0x00}, // z
     {0x0E, 0x18, 0x18, 0x70, 0x18, 0x18, 0x0E, 0x00}, // {
     {0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x00}, // |
@@ -333,7 +334,6 @@ static int cyd_read_battery_percentage(void)
 {
     int val = adc1_get_raw(ADC1_CHANNEL_7); // IO35 is ADC1 Channel 7
     if (val <= 0) {
-        // Fallback to simulated healthy battery state if not wired with resistor divider
         static int simulated_percent = 98;
         static uint32_t last_drain = 0;
         if (xTaskGetTickCount() - last_drain > pdMS_TO_TICKS(60000)) {
@@ -344,8 +344,6 @@ static int cyd_read_battery_percentage(void)
         return simulated_percent;
     }
 
-    // Standard 10k/10k resistor divider maps 3.2V-4.2V battery to 1.6V-2.1V at ADC pin.
-    // ESP32 default attenuation 11dB allows measuring up to ~3.3V.
     float voltage = (val * 3.3f * 2.0f) / 4095.0f;
     int percent = (int)((voltage - 3.2f) * 100.0f / (4.2f - 3.2f));
     if (percent < 0) percent = 0;
@@ -353,18 +351,37 @@ static int cyd_read_battery_percentage(void)
     return percent;
 }
 
-// Screen Backlight wake controls
+// Read ambient light level via onboard LDR on GPIO 34 and adjust backlight
+static void cyd_adjust_backlight_by_ldr(void)
+{
+    if (!display_awake) return;
+
+    int ldr_raw = adc1_get_raw(ADC1_CHANNEL_6); // IO34 is ADC1 Channel 6
+    // Map LDR raw range (0 - 4095) where bright is higher value, dark is lower value
+    int duty = 150 + (ldr_raw * 873 / 4095);
+    if (duty < 150) duty = 150;     // Minimum visible backlight
+    if (duty > 1023) duty = 1023;   // Maximum backlight
+
+    ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_1, duty);
+    ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_1);
+    ESP_LOGD(TAG, "LDR Raw: %d, adjusted screen PWM duty: %d/1023", ldr_raw, duty);
+}
+
+// Screen Backlight wake controls using LEDC PWM
 void cyd_display_wake(void)
 {
-    gpio_set_level(PIN_NUM_BCKL, 1);
     display_awake = true;
+    cyd_adjust_backlight_by_ldr();
     last_touch_ticks = xTaskGetTickCount();
+    ESP_LOGI(TAG, "Backlight ON (Awake)");
 }
 
 void cyd_display_sleep(void)
 {
-    gpio_set_level(PIN_NUM_BCKL, 0);
     display_awake = false;
+    ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_1, 0); // Backlight off
+    ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_1);
+    ESP_LOGI(TAG, "Backlight OFF (Sleep)");
 }
 
 bool cyd_display_is_awake(void)
@@ -416,10 +433,8 @@ static bool touch_read_raw(uint16_t *x, uint16_t *y)
 // Update the premium Dashboard UI
 void cyd_display_update_dashboard(void)
 {
-    // Clear screen to premium black background
     cyd_display_fill_rect(0, 0, CYD_SCREEN_WIDTH, CYD_SCREEN_HEIGHT, CYD_COLOR_GALAXY_BG);
 
-    // Retrieve active details
     wifi_ap_record_t ap_info;
     memset(&ap_info, 0, sizeof(ap_info));
     int rssi = 0;
@@ -444,7 +459,6 @@ void cyd_display_update_dashboard(void)
     // 2. MAIN ACTIVE HOTSPOT CLIENTS BOX (Left Side)
     cyd_display_fill_rect(10, 35, 140, 100, CYD_COLOR_DARK_GRAY);
     cyd_display_draw_string_centered(45, "CLIENTS", CYD_COLOR_GRAY, CYD_COLOR_DARK_GRAY, 1);
-    // Draw count centered in the box
     char count_str[8];
     sprintf(count_str, "%d", client_count);
     int count_len = strlen(count_str);
@@ -466,7 +480,7 @@ void cyd_display_update_dashboard(void)
     cyd_display_draw_string(160, 95, label_buf, ap_connect ? CYD_COLOR_GREEN : CYD_COLOR_RED, CYD_COLOR_GALAXY_BG, 1);
 
     // 4. SAVED AP PROFILE LIST (Bottom Half)
-    cyd_display_draw_string(10, 145, "SAVED NETWORKS (AUTO-SHIFT)", CYD_COLOR_CYAN, CYD_COLOR_GALAXY_BG, 1);
+    cyd_display_draw_string(10, 145, "SAVED NETWORKS (TAP TO SWITCH)", CYD_COLOR_CYAN, CYD_COLOR_GALAXY_BG, 1);
     cyd_display_fill_rect(10, 158, 300, 1, CYD_COLOR_GALAXY_ACCENT);
 
     saved_ap_t saved_list[MAX_SAVED_APS];
@@ -477,10 +491,10 @@ void cyd_display_update_dashboard(void)
         if (saved_list[i].valid) {
             char profile_buf[64];
             bool is_current = (strcmp(saved_list[i].ssid, up_ssid) == 0);
-            sprintf(profile_buf, "%d. %-18.18s  %s", display_row + 1, saved_list[i].ssid, is_current ? "[ACTIVE]" : "[SAVED]");
+            sprintf(profile_buf, "%d. %-18.18s  %s", i + 1, saved_list[i].ssid, is_current ? "[ACTIVE]" : "[SAVED]");
             cyd_display_draw_string(15, 165 + display_row * 13, profile_buf, is_current ? CYD_COLOR_GREEN : CYD_COLOR_GRAY, CYD_COLOR_GALAXY_BG, 1);
             display_row++;
-            if (display_row >= 3) break; // Display top 3
+            if (display_row >= 3) break;
         }
     }
 
@@ -516,16 +530,52 @@ static void cyd_display_task(void *pvParameters)
                 cyd_display_update_dashboard();
             } else {
                 last_touch_ticks = xTaskGetTickCount();
+
+                // Check Row click on Saved AP Profiles
+                if (touch_x >= 10 && touch_x <= 310 && touch_y >= 160 && touch_y <= 200) {
+                    // Identify slot index from coordinate
+                    int row = (touch_y - 160) / 13;
+
+                    // Match visual row to actual NVS valid AP slots
+                    saved_ap_t saved_list[MAX_SAVED_APS];
+                    multi_ap_load(saved_list);
+                    int valid_row_match = 0;
+                    int target_slot = -1;
+
+                    for (int i = 0; i < MAX_SAVED_APS; i++) {
+                        if (saved_list[i].valid) {
+                            if (valid_row_match == row) {
+                                target_slot = i;
+                                break;
+                            }
+                            valid_row_match++;
+                        }
+                    }
+
+                    if (target_slot != -1) {
+                        ESP_LOGI(TAG, "Tapped profile at slot index %d. Switching connection...", target_slot);
+                        // Draw a temporary on-screen loading status to be extremely user-friendly!
+                        cyd_display_fill_rect(10, 215, 300, 20, CYD_COLOR_RED);
+                        cyd_display_draw_string(20, 221, "Connecting to Selected Profile...", CYD_COLOR_WHITE, CYD_COLOR_RED, 1);
+
+                        multi_ap_switch_to(target_slot);
+                        vTaskDelay(pdMS_TO_TICKS(1500));
+                        cyd_display_update_dashboard();
+                    }
+                }
             }
         }
 
+        // Screen auto-timeout after 5 seconds
         if (display_awake && (xTaskGetTickCount() - last_touch_ticks > pdMS_TO_TICKS(5000))) {
             ESP_LOGI(TAG, "Display auto-timeout. Sleeping display.");
             cyd_display_sleep();
         }
 
+        // Periodically refresh dashboard parameters and adjust backlight via LDR
         static uint32_t last_refresh = 0;
         if (display_awake && (xTaskGetTickCount() - last_refresh > pdMS_TO_TICKS(1000))) {
+            cyd_adjust_backlight_by_ldr();
             cyd_display_update_dashboard();
             last_refresh = xTaskGetTickCount();
         }
@@ -539,19 +589,37 @@ esp_err_t cyd_display_init(void)
 
     // Setup ADC for battery measurement on pin IO35
     adc1_config_width(ADC_WIDTH_BIT_12);
-    adc1_config_channel_atten(ADC1_CHANNEL_7, ADC_ATTEN_DB_11);
+    adc1_config_channel_atten(ADC1_CHANNEL_7, ADC_ATTEN_DB_11); // IO35
+    adc1_config_channel_atten(ADC1_CHANNEL_6, ADC_ATTEN_DB_11); // IO34 (LDR Sensor)
+
+    // Configure LEDC Timer and Channel for PWM Backlight on GPIO 21
+    ledc_timer_config_t ledc_timer = {
+        .speed_mode       = LEDC_LOW_SPEED_MODE,
+        .duty_resolution  = LEDC_TIMER_10_BIT,
+        .timer_num        = LEDC_TIMER_1,
+        .freq_hz          = 5000,
+        .clk_cfg          = LEDC_AUTO_CLK
+    };
+    ledc_timer_config(&ledc_timer);
+
+    ledc_channel_config_t ledc_channel = {
+        .speed_mode     = LEDC_LOW_SPEED_MODE,
+        .channel        = LEDC_CHANNEL_1,
+        .timer_sel      = LEDC_TIMER_1,
+        .intr_type      = LEDC_INTR_DISABLE,
+        .gpio_num       = PIN_NUM_BCKL,
+        .duty           = 1023, // Start with maximum brightness
+        .hpoint         = 0
+    };
+    ledc_channel_config(&ledc_channel);
 
     gpio_config_t io_conf = {
-        .pin_bit_mask = (1ULL << PIN_NUM_BCKL),
+        .pin_bit_mask = (1ULL << PIN_NUM_DC),
         .mode = GPIO_MODE_OUTPUT,
         .pull_up_en = GPIO_PULLUP_DISABLE,
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
         .intr_type = GPIO_INTR_DISABLE,
     };
-    gpio_config(&io_conf);
-    gpio_set_level(PIN_NUM_BCKL, 1); // Turn backlight on
-
-    io_conf.pin_bit_mask = (1ULL << PIN_NUM_DC);
     gpio_config(&io_conf);
     gpio_set_level(PIN_NUM_DC, 1);
 
