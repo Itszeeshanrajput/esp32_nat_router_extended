@@ -38,6 +38,9 @@ esp_err_t apply_post_handler(httpd_req_t *req);
 
 // /* RestHandler */
 esp_err_t rest_handler(httpd_req_t *req);
+esp_err_t saved_aps_handler(httpd_req_t *req);
+esp_err_t add_ap_handler(httpd_req_t *req);
+esp_err_t delete_ap_handler(httpd_req_t *req);
 
 /* advanced handler */
 esp_err_t advanced_download_get_handler(httpd_req_t *req);
