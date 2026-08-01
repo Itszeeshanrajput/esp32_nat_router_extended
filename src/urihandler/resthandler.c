@@ -44,18 +44,24 @@ esp_err_t saved_aps_handler(httpd_req_t *req)
         return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Out of memory");
     }
 
-    strcpy(buf, "[");
+    buf[0] = '\0';
+    strncat(buf, "[", 2047);
     bool first = true;
     for (int i = 0; i < MAX_SAVED_APS; i++) {
         if (ap_list[i].valid) {
             char item[256];
-            sprintf(item, "%s{\"ssid\": \"%s\", \"password\": \"%s\"}",
-                    first ? "" : ", ", ap_list[i].ssid, ap_list[i].password);
-            strcat(buf, item);
+            snprintf(item, sizeof(item), "%s{\"ssid\": \"%.32s\", \"password\": \"%.64s\"}",
+                     first ? "" : ", ", ap_list[i].ssid, ap_list[i].password);
+
+            size_t current_len = strlen(buf);
+            size_t remaining = 2048 - current_len - 1;
+            strncat(buf, item, remaining);
             first = false;
         }
     }
-    strcat(buf, "]");
+    size_t current_len = strlen(buf);
+    size_t remaining = 2048 - current_len - 1;
+    strncat(buf, "]", remaining);
 
     esp_err_t ret = httpd_resp_send(req, buf, HTTPD_RESP_USE_STRLEN);
     free(buf);

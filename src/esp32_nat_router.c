@@ -52,6 +52,7 @@
 #include "router_globals.h"
 #include "cyd_display.h"
 #include "multi_ap.h"
+#include "driver/adc.h"
 
 // On board LED
 #define BLINK_GPIO 2
@@ -66,6 +67,9 @@
 
 /* FreeRTOS event group to signal when we are connected*/
 static EventGroupHandle_t wifi_event_group;
+
+/* STA connection retry counter for multi-AP failover */
+static int sta_retry_count = 0;
 
 /* The event group allows multiple bits for each event, but we only care about one event
  * - are we connected to the AP with an IP? */
@@ -461,7 +465,6 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
         ESP_LOGI(TAG, "disconnected - retry to connect to the STA");
         ap_connect = false;
 
-        static int sta_retry_count = 0;
         sta_retry_count++;
         if (sta_retry_count >= 3) {
             ESP_LOGI(TAG, "STA connection failed 3 times. Attempting auto-shift to another saved AP...");
@@ -479,6 +482,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
         ESP_LOGI(TAG, "Got IP: http://" IPSTR, IP2STR(&event->ip_info.ip));
         stop_dns_server();
         ap_connect = true;
+        sta_retry_count = 0; // Reset retry count upon successful connection
         my_ip = event->ip_info.ip.addr;
         delete_portmap_tab();
         apply_portmap_tab();
@@ -770,6 +774,113 @@ static void setLogLevel(void)
     }
 }
 
+static int do_list_saved_aps(int argc, char **argv)
+{
+    saved_ap_t ap_list[MAX_SAVED_APS];
+    multi_ap_load(ap_list);
+    printf("Saved AP Profiles:\n");
+    printf("--------------------------------------------------\n");
+    printf("%-5s | %-20s | %-20s\n", "Slot", "SSID", "Password");
+    printf("--------------------------------------------------\n");
+    int count = 0;
+    for (int i = 0; i < MAX_SAVED_APS; i++) {
+        if (ap_list[i].valid) {
+            printf("%-5d | %-20.20s | %-20.20s\n", i + 1, ap_list[i].ssid, ap_list[i].password);
+            count++;
+        }
+    }
+    if (count == 0) {
+        printf("No saved AP profiles configured.\n");
+    }
+    printf("--------------------------------------------------\n");
+    return 0;
+}
+
+static int do_add_saved_ap(int argc, char **argv)
+{
+    if (argc < 2) {
+        printf("Usage: add_saved_ap <ssid> [password]\n");
+        return 1;
+    }
+    const char *ssid_val = argv[1];
+    const char *pass_val = (argc >= 3) ? argv[2] : "";
+    esp_err_t err = multi_ap_add(ssid_val, pass_val);
+    if (err == ESP_OK) {
+        printf("Successfully added AP: %s\n", ssid_val);
+    } else {
+        printf("Failed to add AP: %s\n", esp_err_to_name(err));
+    }
+    return 0;
+}
+
+static int do_delete_saved_ap(int argc, char **argv)
+{
+    if (argc < 2) {
+        printf("Usage: delete_saved_ap <ssid>\n");
+        return 1;
+    }
+    const char *ssid_val = argv[1];
+    esp_err_t err = multi_ap_delete(ssid_val);
+    if (err == ESP_OK) {
+        printf("Successfully deleted AP: %s\n", ssid_val);
+    } else {
+        printf("Failed to delete AP: %s\n", esp_err_to_name(err));
+    }
+    return 0;
+}
+
+static int do_read_battery(int argc, char **argv)
+{
+    int val = adc1_get_raw(ADC1_CHANNEL_7);
+    float voltage = (val * 3.3f * 2.0f) / 4095.0f;
+    int percentage = (int)((voltage - 3.2f) * 100.0f / (4.2f - 3.2f));
+    if (percentage < 0) percentage = 0;
+    if (percentage > 100) percentage = 100;
+
+    printf("Battery Status Calibration Tool:\n");
+    printf("----------------------------------\n");
+    printf("Raw ADC reading (GPIO 35): %d / 4095\n", val);
+    printf("Estimated Battery Voltage: %.2f V\n", voltage);
+    printf("Estimated State of Charge: %d %%\n", percentage);
+    printf("----------------------------------\n");
+    return 0;
+}
+
+static void register_custom_router_cmds(void)
+{
+    const esp_console_cmd_t list_cmd = {
+        .command = "list_saved_aps",
+        .help = "List all NVS persistent multi-AP failover profiles",
+        .hint = NULL,
+        .func = &do_list_saved_aps,
+    };
+    ESP_ERROR_CHECK(esp_console_cmd_register(&list_cmd));
+
+    const esp_console_cmd_t add_cmd = {
+        .command = "add_saved_ap",
+        .help = "Add a saved backup AP profile to NVS list",
+        .hint = "<ssid> [password]",
+        .func = &do_add_saved_ap,
+    };
+    ESP_ERROR_CHECK(esp_console_cmd_register(&add_cmd));
+
+    const esp_console_cmd_t del_cmd = {
+        .command = "delete_saved_ap",
+        .help = "Delete a saved backup AP profile from NVS",
+        .hint = "<ssid>",
+        .func = &do_delete_saved_ap,
+    };
+    ESP_ERROR_CHECK(esp_console_cmd_register(&del_cmd));
+
+    const esp_console_cmd_t bat_cmd = {
+        .command = "read_battery",
+        .help = "Read raw ADC value and estimated voltage for battery calibration",
+        .hint = NULL,
+        .func = &do_read_battery,
+    };
+    ESP_ERROR_CHECK(esp_console_cmd_register(&bat_cmd));
+}
+
 void app_main(void)
 {
     initialize_nvs();
@@ -787,6 +898,7 @@ void app_main(void)
     register_system();
 
     register_router();
+    register_custom_router_cmds(); // Register custom CLI console commands natively
     fillMac();
     get_config_param_str("ssid", &ssid);
     if (ssid == NULL)

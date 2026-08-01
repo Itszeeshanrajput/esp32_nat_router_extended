@@ -16,6 +16,7 @@ static const char *TAG = "CYD_Display";
 
 extern char *ap_ip;
 extern char *ap_ssid;
+extern esp_err_t multi_ap_switch_to(int slot_index);
 
 // GPIO Configuration for ILI9341 LCD
 #define LCD_SPI_HOST       SPI2_HOST
@@ -100,38 +101,6 @@ static const uint8_t font8x8[96][8] = {
     {0x00, 0x00, 0x63, 0x63, 0x6B, 0x7F, 0x36, 0x00}, // w
     {0x63, 0x63, 0x36, 0x1C, 0x36, 0x63, 0x63, 0x00}, // X
     {0x63, 0x63, 0x63, 0x36, 0x1C, 0x18, 0x18, 0x00}, // Y
-    {0x7F, 0x03, 0x06, 0x0C, 0x18, 0x30, 0x7F, 0x00}, // Z
-    {0x3C, 0x30, 0x30, 0x30, 0x30, 0x30, 0x3C, 0x00}, // [
-    {0xC0, 0x60, 0x30, 0x18, 0x0C, 0x06, 0x03, 0x00}, // backslash
-    {0x3C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x3C, 0x00}, // ]
-    {0x18, 0x3C, 0x66, 0x00, 0x00, 0x00, 0x00, 0x00}, // ^
-    {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF}, // _
-    {0x30, 0x18, 0x0C, 0x00, 0x00, 0x00, 0x00, 0x00}, // `
-    {0x00, 0x00, 0x3E, 0x03, 0x3F, 0x63, 0x3F, 0x00}, // a
-    {0x60, 0x60, 0x7E, 0x63, 0x63, 0x63, 0x7E, 0x00}, // b
-    {0x00, 0x00, 0x3E, 0x60, 0x60, 0x63, 0x3E, 0x00}, // c
-    {0x03, 0x03, 0x3F, 0x63, 0x63, 0x63, 0x3F, 0x00}, // d
-    {0x00, 0x00, 0x3E, 0x63, 0x7F, 0x60, 0x3E, 0x00}, // e
-    {0x1C, 0x30, 0x7E, 0x30, 0x30, 0x30, 0x30, 0x00}, // f
-    {0x00, 0x00, 0x3F, 0x63, 0x63, 0x3F, 0x03, 0x3E}, // g
-    {0x60, 0x60, 0x7E, 0x63, 0x63, 0x63, 0x63, 0x00}, // h
-    {0x18, 0x00, 0x18, 0x18, 0x18, 0x18, 0x18, 0x00}, // i
-    {0x0C, 0x00, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x38}, // j
-    {0x60, 0x60, 0x66, 0x6C, 0x78, 0x6C, 0x66, 0x00}, // k
-    {0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x1C, 0x00}, // l
-    {0x00, 0x00, 0x76, 0x7F, 0x6D, 0x63, 0x63, 0x00}, // m
-    {0x00, 0x00, 0x7E, 0x63, 0x63, 0x63, 0x63, 0x00}, // n
-    {0x00, 0x00, 0x3E, 0x63, 0x63, 0x63, 0x3E, 0x00}, // o
-    {0x00, 0x00, 0x7E, 0x63, 0x63, 0x7E, 0x60, 0x60}, // p
-    {0x00, 0x00, 0x3F, 0x63, 0x63, 0x3F, 0x03, 0x03}, // q
-    {0x00, 0x00, 0x7E, 0x63, 0x60, 0x60, 0x60, 0x00}, // r
-    {0x00, 0x00, 0x3E, 0x60, 0x3E, 0x03, 0x3E, 0x00}, // s
-    {0x30, 0x30, 0x7E, 0x30, 0x30, 0x30, 0x1C, 0x00}, // t
-    {0x00, 0x00, 0x63, 0x63, 0x63, 0x63, 0x3F, 0x00}, // u
-    {0x00, 0x00, 0x63, 0x63, 0x63, 0x36, 0x1C, 0x00}, // v
-    {0x00, 0x00, 0x63, 0x63, 0x6B, 0x7F, 0x36, 0x00}, // w
-    {0x63, 0x63, 0x36, 0x1C, 0x36, 0x63, 0x63, 0x00}, // X
-    {0x63, 0x63, 0x63, 0x36, 0x1C, 0x18, 0x18, 0x00}, // Y
     {0x7F, 0x03, 0x06, 0x0C, 0x18, 0x7F, 0x00}, // z
     {0x0E, 0x18, 0x18, 0x70, 0x18, 0x18, 0x0E, 0x00}, // {
     {0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x00}, // |
@@ -205,8 +174,8 @@ void cyd_display_fill_rect(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t 
     int chunk_pixels = 320; // fill line chunks
     if (chunk_pixels > w) chunk_pixels = w;
 
-    uint8_t *buf = malloc(chunk_pixels * 2);
-    if (!buf) return;
+    // Use a stack-allocated buffer to completely avoid heap fragmentation
+    uint8_t buf[640];
 
     for (int i = 0; i < chunk_pixels; i++) {
         buf[i * 2] = (color >> 8) & 0xFF;
@@ -227,8 +196,6 @@ void cyd_display_fill_rect(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t 
         spi_device_polling_transmit(lcd_spi_handle, &t);
         total_bytes -= to_write;
     }
-
-    free(buf);
 }
 
 // Clear the entire screen
@@ -246,7 +213,8 @@ static void cyd_display_draw_char(int16_t x, int16_t y, char c, uint16_t color, 
     for (int8_t i = 0; i < 8; i++) {
         uint8_t line = font8x8[idx][i];
         for (int8_t j = 0; j < 8; j++) {
-            if (line & (1 << j)) {
+            // Read bits from MSB (left) to LSB (right) to prevent character mirroring
+            if (line & (0x80 >> j)) {
                 if (scale == 1) {
                     cyd_display_draw_pixel(x + j, y + i, color);
                 } else {
@@ -422,6 +390,7 @@ static bool touch_read_raw(uint16_t *x, uint16_t *y)
         *x = (raw_x - 150) * CYD_SCREEN_WIDTH / 3800;
         *y = (raw_y - 150) * CYD_SCREEN_HEIGHT / 3800;
 
+        // Standard touch orientation matching un-mirrored layout
         *x = CYD_SCREEN_WIDTH - *x;
         *y = CYD_SCREEN_HEIGHT - *y;
 
@@ -533,10 +502,8 @@ static void cyd_display_task(void *pvParameters)
 
                 // Check Row click on Saved AP Profiles
                 if (touch_x >= 10 && touch_x <= 310 && touch_y >= 160 && touch_y <= 200) {
-                    // Identify slot index from coordinate
                     int row = (touch_y - 160) / 13;
 
-                    // Match visual row to actual NVS valid AP slots
                     saved_ap_t saved_list[MAX_SAVED_APS];
                     multi_ap_load(saved_list);
                     int valid_row_match = 0;
@@ -554,7 +521,6 @@ static void cyd_display_task(void *pvParameters)
 
                     if (target_slot != -1) {
                         ESP_LOGI(TAG, "Tapped profile at slot index %d. Switching connection...", target_slot);
-                        // Draw a temporary on-screen loading status to be extremely user-friendly!
                         cyd_display_fill_rect(10, 215, 300, 20, CYD_COLOR_RED);
                         cyd_display_draw_string(20, 221, "Connecting to Selected Profile...", CYD_COLOR_WHITE, CYD_COLOR_RED, 1);
 
@@ -566,13 +532,11 @@ static void cyd_display_task(void *pvParameters)
             }
         }
 
-        // Screen auto-timeout after 5 seconds
         if (display_awake && (xTaskGetTickCount() - last_touch_ticks > pdMS_TO_TICKS(5000))) {
             ESP_LOGI(TAG, "Display auto-timeout. Sleeping display.");
             cyd_display_sleep();
         }
 
-        // Periodically refresh dashboard parameters and adjust backlight via LDR
         static uint32_t last_refresh = 0;
         if (display_awake && (xTaskGetTickCount() - last_refresh > pdMS_TO_TICKS(1000))) {
             cyd_adjust_backlight_by_ldr();
@@ -665,7 +629,7 @@ esp_err_t cyd_display_init(void)
     lcd_write_data_byte(0x55);
 
     lcd_write_cmd(0x36); // Memory Access Control (Orientation)
-    lcd_write_data_byte(0x28);
+    lcd_write_data_byte(0x28); // Standard 0x28 landscape orientation (un-mirrored text with corrected font loop)
 
     lcd_write_cmd(0x11); // Sleep Out
     vTaskDelay(pdMS_TO_TICKS(150));
