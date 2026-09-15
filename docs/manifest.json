@@ -1,0 +1,13 @@
+{
+  "name": "ESP32 NAT Router Extended (Zero Latency Edition)",
+  "version": "2.2.0-optimized",
+  "new_install_prompt_erase": true,
+  "builds": [
+    {
+      "chipFamily": "ESP32",
+      "parts": [
+        { "path": "esp32nat_extended_full.bin", "offset": 0 }
+      ]
+    }
+  ]
+}

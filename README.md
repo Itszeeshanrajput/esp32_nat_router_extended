@@ -38,7 +38,15 @@ Connect to the SSID `ESP32_NAT_Router` and visit `http://192.168.4.1`.
 
 ---
 
-## 🛠️ Flashing Pre-built Binaries
+## 🌐 One-Click Web Installer (Flash in Browser)
+
+You can flash this customized high-performance firmware directly to your ESP32 from your browser without installing command-line tools:
+
+👉 **[Open Web Installer (docs/install.html)](docs/install.html)** *(Use Google Chrome, Microsoft Edge, or Opera)*
+
+---
+
+## 🛠️ Flashing Pre-built Binaries (Manual)
 
 ### Option 1: esptool.py (Command Line)
 ```bash
