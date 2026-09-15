@@ -10,6 +10,7 @@
 #include "router_globals.h"
 #include "esp_wifi.h"
 #include "multi_ap.h"
+#include "timer.h"
 
 static const char *TAG = "CYD_Display";
 
@@ -465,6 +466,16 @@ void cyd_display_update_dashboard(void)
     sprintf(label_buf, "UPLINK: %s", up_ssid);
     cyd_display_draw_string(160, 95, label_buf, ap_connect ? CYD_COLOR_GREEN : CYD_COLOR_RED, CYD_COLOR_GALAXY_BG, 1);
 
+    int lat = watchdog_get_last_latency();
+    if (lat >= 0) {
+        sprintf(label_buf, "PING: %d ms", lat);
+        cyd_display_draw_string(160, 115, label_buf, CYD_COLOR_GREEN, CYD_COLOR_GALAXY_BG, 1);
+    } else if (ap_connect) {
+        cyd_display_draw_string(160, 115, "PING: TESTING...", CYD_COLOR_YELLOW, CYD_COLOR_GALAXY_BG, 1);
+    } else {
+        cyd_display_draw_string(160, 115, "PING: N/A", CYD_COLOR_RED, CYD_COLOR_GALAXY_BG, 1);
+    }
+
     // 4. SAVED AP PROFILE LIST (Bottom Half)
     cyd_display_draw_string(10, 145, "SAVED NETWORKS (AUTO-SHIFT)", CYD_COLOR_CYAN, CYD_COLOR_GALAXY_BG, 1);
     cyd_display_fill_rect(10, 158, 300, 1, CYD_COLOR_GALAXY_ACCENT);
@@ -490,7 +501,7 @@ void cyd_display_update_dashboard(void)
 
     // 5. FOOTER STATUS BAR (y: 215 to 240)
     cyd_display_fill_rect(10, 215, 300, 20, CYD_COLOR_DARK_GRAY);
-    cyd_display_draw_string(20, 221, "Touch screen to Wake  |  5s Timer", CYD_COLOR_CYAN, CYD_COLOR_DARK_GRAY, 1);
+    cyd_display_draw_string(20, 221, "Touch to Wake | MAX TX | NO DELAY", CYD_COLOR_CYAN, CYD_COLOR_DARK_GRAY, 1);
 }
 
 // Background task

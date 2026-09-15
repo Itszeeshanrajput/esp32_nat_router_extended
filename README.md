@@ -1,110 +1,64 @@
-# ESP32 NAT Router Extended
+# ESP32 NAT Router Extended — High Performance & CYD Galaxy Edition 🚀
 
-This is a firmware to use the ESP32 as WiFi NAT router. It can be used as
-- Simple range extender for an existing WiFi network
-- Setting up an additional WiFi network with different SSID/password for guests or IOT devices
+[![Build Status](https://img.shields.io/badge/PlatformIO-ESP--IDF-orange.svg)](https://platformio.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![WiFi Power Save](https://img.shields.io/badge/WiFi_Power_Save-Disabled_(Zero_Latency)-green.svg)]()
+[![TX Power](https://img.shields.io/badge/Max_TX_Power-20dBm_(Max_Range)-blue.svg)]()
+[![24/7 Stability](https://img.shields.io/badge/Watchdog-24%2F7_Auto--Reconnect-brightgreen.svg)]()
 
-This is an extension of the great work of [martin-ger's ESP32 NAT Router-project](https://github.com/martin-ger/esp32_nat_router). I used his project as a starting point for learning microcontroller programming and extended it with some features for my use case. 
+This is an optimized, feature-rich firmware to use the ESP32 as a high-performance **WiFi NAT Router / Repeater**. Designed for maximum signal quality, ultra-low latency, 24/7 unbreakable internet connections, multi-AP auto-failover, and full support for Cheap Yellow Display (CYD / ESP32-2432S028R) touchscreens!
 
-## Features / Usage scenarios
-- Extend range of WiFi network (Repeater)
-- Additional network for guests
-- Portable usage with a small, low power device (battery powered)
-- [Bypass restrictions](docs/advanced.md#advanced-configuration) in public WiFis, like device and rate limit
-- Scanning for APs (s. [limitations](#wifi-scanning-limitation))
-- User friendly UI with mobile support
-- [Resetting the device](docs/advanced.md#resetting-the-device-erasing-the-flash) in UI and with Pin/Button
-- [OTA-Updates](docs/ota.md)
-- Keep connection alive on networks with forced disconnect
-- Secure frontend by password or complete disabling
-- Show connected state and quality in UI
-- Disable the on board indicator LED 
+---
 
-## First Boot
-After first boot the ESP32 NAT Router will offer a WiFi network with an open AP and the ssid "ESP32_NAT_Router". Configuration can either be done via a simple web interface or via the serial console. 
+## ⚡ High Performance & Low Latency Optimizations
 
-## Web Config Interface
-The web interface allows for the configuration of all parameters. Connect you PC or smartphone to the WiFi SSID "ESP32_NAT_Router" and point your browser to "http://192.168.4.1". This page should appear:
+- **Zero-Latency Wi-Fi (`WIFI_PS_NONE`):** Wi-Fi modem power saving is disabled by default to eliminate delay spikes, ping jitter, and packet buffering stalls during active throughput.
+- **Maximum Transmit Power (20 dBm / 80):** Wi-Fi TX power defaults to maximum output power to ensure stable connections even through walls or weak signals.
+- **24/7 Smart Ping Watchdog:** Background health checker actively pings upstream connectivity. If 3 consecutive failures occur, it automatically triggers auto-recovery or switches to a saved AP.
+- **Enhanced Multi-AP Auto-Shift:** Multi-network failover automatically scans and connects to the strongest saved Wi-Fi access point if your primary network goes down.
+- **CYD Display Real-Time Dashboard (ESP32-2432S028R):** ILI9341 LCD + XPT2046 touchscreen UI displaying connected clients, signal RSSI, live ping latency in ms, battery percentage, and active network profiles.
 
-![image](docs/index.png)
+---
 
-First enter the appropriate values for the uplink WiFi network, the "STA Settings". Leave password blank for open networks. Click "Connect". The ESP32 reboots and will connect to your WiFi router.
+## 🌐 Features & Use Cases
+- **Range Extender / Repeater:** Extend existing Wi-Fi networks easily.
+- **Guest / IoT Isolated Network:** Create separate SSIDs with custom subnets and passwords.
+- **Bypass Captive Portals & Device Limits:** Mask multiple clients behind a single MAC / IP address.
+- **WPA2 Enterprise Support:** EAP-TLS / PEAP support for university and corporate networks.
+- **Port Mapping / Forwarding:** Map internal ports for remote server access or gaming.
+- **Mobile-Friendly Web UI & OTA Updates:** Simple browser interface at `192.168.4.1` with fast over-the-air update capability.
 
-Now you can reconnect and reload the page and change the "Soft AP Settings". Click "Set" and again the ESP32 reboots. Now it is ready for forwarding traffic over the newly configured Soft AP. Be aware that these changes also affect the config interface, i.e. to do further configuration, connect to the ESP32 through one of the newly configured WiFi networks.
+---
 
-## Screenshots
+## 🖥️ Web Config Interface & Screenshots
 
-![image](docs/scan.png)
-![image](docs/enterprise_wifi.png)
-![image](docs/advanced.png)
-![image](docs/portmap.png)
-![image](docs/reset.png)
-![image](docs/lock.png)
-![image](docs/ota.png)
-![image](docs/unlock.png)
-![image](docs/connected_clients.png)
+Connect to the SSID `ESP32_NAT_Router` and visit `http://192.168.4.1`.
 
+![Main Interface](docs/index.png)
 
-## Flashing the prebuild binaries
-- Download [latest release](https://github.com/dchristl/esp32_nat_router_extended/releases/latest)
-  * Download esp32nat_extended_full_vX.X.X.zip for fresh install
-  * Download esp32nat_extended_update_vX.X.X.zip for update
-- Install [esptool](https://github.com/espressif/esptool)
- 
+---
 
-### First install/ Reset 
+## 🛠️ Flashing Pre-built Binaries
 
-If your device was used before for other projects or you want to reset all setting from previous version. Complete data loss!
-Unpack archive first and then execute:
-
-```
-esptool.py write_flash 0x0 esp32nat_extended_full_vX.X.X.bin 
-```
-
-### Update from older version
-If this project was already installed. No data loss from previous version. The preferred way is with [OTA-Updates](docs/ota.md). If you want to do it manually:
- 
-```
-esptool.py write_flash 0x10000 esp32nat_extended_vX.X.X.bin 
-```
-### General 
-
-If any problem occurs, erase flash manually before flashing the full version :
-```
+### Option 1: esptool.py (Command Line)
+```bash
+# Erase flash (recommended for fresh install)
 esptool.py erase_flash
+
+# Flash full binary at address 0x0
+esptool.py write_flash 0x0 esp32nat_extended_full_vX.X.X.bin
 ```
 
+### Option 2: PlatformIO
+```bash
+# Build binary
+pio run -e esp32
 
-### Alternative way/ Graphical (Windows only)
-As an alternative you might use [Espressif's Flash Download Tools](https://www.espressif.com/en/support/download/other-tools).
+# Upload to board
+pio run -e esp32 -t upload
+```
 
-Check the marked parameters and files like below (ckeck the COM-Port for your environment). 
+---
 
-Check the addresses like below: 
-
-### First install/ Reset 
-
-![image](docs/win_flash_full.png)
-
-### Update from older version
-
-![image](docs/win_flash.png)
-
-## Building the Binaries
-
-see [How to setup environment and build](docs/BUILD.md)
-
-
-## Wifi scanning limitation
-Due to technical limitations, a client cannot be simultaneously connected to the device and scan for Wi-Fi networks. Before the scan starts, all the clients will be disconnected. After that, the scan will be saved in NVS,and the device will reboot. Upon reconnecting to the device, you will be able to view the scanned networks.
-
-An automatic redirect occurs the first time. Afterward, the scanned networks can be viewed three more times before they are deleted from the NVS to save storage space.
-
-## Misc
-
-If you have any problems, suggestions for new features feel free to ask or raise an issue. This is a spare time project, I will answer if I'm free.
-If you like my work and want to support me, you can [buy me coffee](https://www.buymeacoffee.com/dchristl) or send me a donation via [PayPal](https://bit.ly/3Gde3KN)
-
-## Advanced topics and configuration
-
-see [Advanced topics](docs/advanced.md)
+## 📜 License
+This project is licensed under the MIT License — see the original repositories [martin-ger/esp32_nat_router](https://github.com/martin-ger/esp32_nat_router) and [dchristl/esp32_nat_router_extended](https://github.com/dchristl/esp32_nat_router_extended).
