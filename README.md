@@ -38,11 +38,17 @@ Connect to the SSID `ESP32_NAT_Router` and visit `http://192.168.4.1`.
 
 ---
 
-## 🌐 One-Click Web Installer (Flash in Browser)
+## ⚡ One-Click Browser Flasher (Web Installer)
 
-You can flash this customized high-performance firmware directly to your ESP32 from your browser without installing command-line tools:
+You can flash this modified high-performance firmware directly to your ESP32 from your browser over USB (no command line required!):
 
-👉 **[Open Web Installer (docs/install.html)](docs/install.html)** *(Use Google Chrome, Microsoft Edge, or Opera)*
+👉 **[Launch Web Installer in Browser (docs/install.html)](docs/install.html)**
+*(Requires Google Chrome, Microsoft Edge, or Opera on Desktop)*
+
+*To enable direct web flashing on your GitHub repository:*
+1. Go to repository **Settings** -> **Pages**.
+2. Set Source to `Deploy from a branch` and select `main` (or default branch) `/docs` folder.
+3. Your live browser installer will be hosted at `https://<your-username>.github.io/<your-repo>/install.html`.
 
 ---
 
