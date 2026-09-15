@@ -52,6 +52,7 @@
 #include "router_globals.h"
 #include "cyd_display.h"
 #include "multi_ap.h"
+#include "timer.h"
 
 // On board LED
 #define BLINK_GPIO 2
@@ -347,6 +348,11 @@ void setTxPower()
     {
         ESP_LOGI(TAG, "Setting Wifi tx power to %ld.", txPower);
         ESP_ERROR_CHECK(esp_wifi_set_max_tx_power(txPower));
+    }
+    else
+    {
+        ESP_LOGI(TAG, "Setting Wifi tx power to max (80 = 20dBm) for optimal signal quality.");
+        esp_wifi_set_max_tx_power(80);
     }
 }
 
@@ -682,6 +688,16 @@ void wifi_init(const char *ssid, const char *passwd, const char *static_ip, cons
     {
         ESP_LOGI(TAG, "wifi_init_ap with default finished.");
     }
+
+    // Disable Wi-Fi power save mode to eliminate ping/latency spikes
+    int32_t disable_ps = 1;
+    get_config_param_int("disable_ps", &disable_ps);
+    if (disable_ps != 0)
+    {
+        ESP_LOGI(TAG, "Disabling WiFi Power Save mode for lowest latency (WIFI_PS_NONE)");
+        esp_wifi_set_ps(WIFI_PS_NONE);
+    }
+
     setTxPower();
     start_dns_server();
 }
@@ -863,6 +879,9 @@ void app_main(void)
 
     // Setup WIFI
     wifi_init(ssid, passwd, static_ip, subnet_mask, gateway_addr, ap_ssid, ap_passwd, ap_ip, sta_user, sta_identity);
+
+    // Initialize 24/7 Smart Ping Watchdog for active internet link monitoring
+    initializePingWatchdog();
 
     pthread_t t1;
     int32_t led_disabled = 0;
